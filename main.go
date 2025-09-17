@@ -19,8 +19,11 @@ func connect() {
 	}
 
 	log.Printf ("Listening for connections on localhost%v", ":4000")
-	connCounter := 0
+	// var (
+	// 	mut sync.Mutex
+	// )
 
+	connCounter := 0
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -30,7 +33,6 @@ func connect() {
 
 		connCounter += 1
 		go handleConn(conn, connCounter)
-		connCounter -= 1
 	}
 }
 
@@ -48,6 +50,7 @@ func handleConn(conn net.Conn, connCounter int) {
 			break
 		}
 
+		fmt.Printf ("%+v\n", string(b))
 		fmt.Print (bytesRead, " bytes read\nMessage = ", string(b[:bytesRead]))
 
 		writeMsg := "Status: MSG_READ\nLast Message:" + string(b[:bytesRead])
@@ -60,7 +63,11 @@ func handleConn(conn net.Conn, connCounter int) {
 		fmt.Println (bytesWrite, "bytes Written to connection ", connCounter)
 	}
 
-	fmt.Println ("Closed the connection[", connCounter, "]")
+	fmt.Println ("Closed the connection:", connCounter)
+
+	// mut.Lock()
+	// *connCounter -= 1
+	// mut.Unlock()
 }
 
 //TODO: add a queue to handle connection limit
