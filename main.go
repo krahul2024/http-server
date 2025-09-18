@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,9 @@ import (
 func main() {
 	connect()
 }
+
+const CRLF    = "\r\n"
+const NewLine = "\n"
 
 type HeaderType int
 const (
@@ -43,6 +47,18 @@ var HeaderValTypes = map[string]HeaderType{
     "access-control-max-age"           : TypeInt,
 }
 
+// empty struct holds 0 bytes(damn)
+var HopByHopHeaders = map[string]struct{}{
+	"connection":          {},
+	"keep-alive":          {},
+	"proxy-authenticate":  {},
+	"proxy-authorization": {},
+	"te":                  {},
+	"trailer":             {},
+	"transfer-encoding":   {},
+	"upgrade":             {},
+}
+
 type RequestMethod string
 const (
 	GET RequestMethod = "GET"
@@ -51,13 +67,43 @@ const (
 	DELETE = "DELETE"
 )
 
-type RequestMeta struct {
+type Request struct {
 	Method RequestMethod
 	Path string
 	Version string
 	Headers map[string]any
 	Body    []byte
 }
+
+type Response struct {
+	Version    string
+	StatusCode int
+	StatusText string
+	Headers    map[string]any
+	Body []byte
+}
+
+type ReqStatus struct {
+	Code int
+	Msg  string
+}
+var (
+    StatusOK                  = ReqStatus{Code: 200, Msg: "OK"}
+    StatusCreated             = ReqStatus{Code: 201, Msg: "Created"}
+    StatusAccepted            = ReqStatus{Code: 202, Msg: "Accepted"}
+    StatusNoContent           = ReqStatus{Code: 204, Msg: "No Content"}
+
+    StatusBadRequest          = ReqStatus{Code: 400, Msg: "Bad Request"}
+    StatusUnauthorized        = ReqStatus{Code: 401, Msg: "Unauthorized"}
+    StatusForbidden           = ReqStatus{Code: 403, Msg: "Forbidden"}
+    StatusNotFound            = ReqStatus{Code: 404, Msg: "Not Found"}
+    StatusMethodNotAllowed    = ReqStatus{Code: 405, Msg: "Method Not Allowed"}
+
+    StatusInternalServerError = ReqStatus{Code: 500, Msg: "Internal Server Error"}
+    StatusNotImplemented      = ReqStatus{Code: 501, Msg: "Not Implemented"}
+    StatusBadGateway          = ReqStatus{Code: 502, Msg: "Bad Gateway"}
+    StatusServiceUnavailable  = ReqStatus{Code: 503, Msg: "Service Unavailable"}
+)
 
 func connect() {
 	listener, err := net.Listen("tcp", ":4000")
@@ -84,23 +130,27 @@ func handleConn(conn net.Conn, connCounter int) {
 	defer conn.Close()
 
 	for {
-		if err := readMsg(conn); err != nil {
+		var req Request
+		if err := readMsg(conn, &req); err != nil {
 			log.Printf ("Conn[%v]: Read Error = %v\n", connCounter, err.Error())
 			return;
 		}
 
-		writeMsg        := "Status: MSG_READ"
-		bytesWrite, err := conn.Write([]byte(writeMsg))
-		if err != nil {
+		var res Response
+		res.Version    = req.Version
+		res.Headers    = req.Headers
+		res.Body       = req.Body
+		res.StatusCode = StatusOK.Code
+		res.StatusText = StatusOK.Msg
+
+		if err := writeMsg(conn, &res); err != nil {
 			log.Printf("Error = %v\n", err.Error())
 			return
 		}
-
-		fmt.Println (bytesWrite, "bytes Written to connection ", connCounter)
 	}
 }
 
-func readMsg (conn net.Conn) (error) {
+func readMsg (conn net.Conn, req *Request) (error) {
 	err := conn.SetDeadline(time.Now().Add(10 * time.Second))
 	if err != nil {
 		return  err
@@ -113,13 +163,12 @@ func readMsg (conn net.Conn) (error) {
 		return err
 	}
 
-	var req RequestMeta
 	req.Headers = make(map[string]any)
-	if err = parseReqLine(reqStartLine, &req); err != nil {
+	if err = parseReqLine(reqStartLine, req); err != nil {
 		return err
 	}
 
-	if err = parseHeaders(reader, &req); err != nil {
+	if err = parseHeaders(reader, req); err != nil {
 		return err
 	}
 
@@ -130,7 +179,7 @@ func readMsg (conn net.Conn) (error) {
 	}
 
 	req.Body = make([]byte, contentLength)
-	if err = readBody(reader, &req); err != nil {
+	if err = readBody(reader, req); err != nil {
 		return err
 	}
 
@@ -140,8 +189,8 @@ func readMsg (conn net.Conn) (error) {
 	return nil
 }
 
-func parseReqLine (s string, r *RequestMeta) error {
-	s = strings.TrimSuffix(s, "\r\n")
+func parseReqLine (s string, r *Request) error {
+	s = strings.TrimSuffix(s, CRLF)
 	strs := strings.Split(s, " ")
 	if len(strs) != 3 {
 		return errors.New("error parsing request")
@@ -167,7 +216,7 @@ func parseReqLine (s string, r *RequestMeta) error {
 	return nil
 }
 
-func parseHeaders(reader *bufio.Reader, req *RequestMeta) (error) {
+func parseHeaders(reader *bufio.Reader, req *Request) (error) {
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -175,7 +224,7 @@ func parseHeaders(reader *bufio.Reader, req *RequestMeta) (error) {
 			return errors.New("error parsing headers")
 		}
 
-		s := strings.TrimSuffix(line, "\r\n")
+		s := strings.TrimSuffix(line, CRLF)
 		if line == "" {
 			break
 		}
@@ -214,7 +263,7 @@ func parseHeaderValue(value string, typ HeaderType) (any, error) {
     }
 }
 
-func readBody(reader *bufio.Reader, req *RequestMeta) error {
+func readBody(reader *bufio.Reader, req *Request) error {
 	_, err := reader.Read(req.Body)
 	return err
 }
@@ -234,6 +283,54 @@ func strToBool(value string) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid value for bool parsing : %q", value)
 	}
+}
+
+func writeMsg(conn net.Conn, res *Response) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
+	defer conn.SetWriteDeadline(time.Time{})
+
+	var buffer bytes.Buffer
+	start, err := resStartStr(res)
+	if err != nil {
+		return err
+	}
+	buffer.WriteString(start)
+
+	hStr, err := headersStr(res)
+	if err != nil {
+		return err
+	}
+	buffer.WriteString(hStr)
+	buffer.WriteString(CRLF)
+	buffer.Write(res.Body)
+
+	writer := bufio.NewWriter(conn)
+	_, err = writer.Write(buffer.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return writer.Flush()
+}
+
+func resStartStr (res *Response) (string, error) {
+	//TODO: check validity of version, and rest of the stuff
+	resStr := fmt.Sprintf("%v %v %v%v", res.Version, res.StatusCode, res.StatusText, CRLF)
+	return resStr, nil
+}
+
+func headersStr (res *Response) (string, error) {
+	headerStr := ""
+
+	for key, val := range res.Headers {
+		if _, ok := HopByHopHeaders[strings.ToLower(key)]; !ok {
+			headerStr += fmt.Sprintf("%v: %v%v", key, val, CRLF)
+		}
+	}
+
+	return headerStr, nil
 }
 
 //TODO: add a queue to handle connection limit
