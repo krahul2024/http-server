@@ -1,16 +1,32 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
+	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
+	"strings"
+	"time"
 )
 
 func main() {
-	fmt.Println("This is some hello text")
 	connect()
+}
+
+type RequestMethod string
+const (
+	GET RequestMethod = "GET"
+	POST = "POST"
+	PUT = "PUT"
+	DELETE = "DELETE"
+)
+
+type RequestMeta struct {
+	Method RequestMethod
+	Path string
+	Version string
+	Headers map[string]any
 }
 
 func connect() {
@@ -38,15 +54,12 @@ func handleConn(conn net.Conn, connCounter int) {
 	defer conn.Close()
 
 	for {
-		msg, err := readMsg(conn)
-		if err != nil {
+		if err := readMsg(conn); err != nil {
 			log.Printf ("Conn[%v]: Read Error = %v\n", connCounter, err.Error())
 			return;
 		}
 
-		fmt.Printf ("Conn[%v]: Message = %v", connCounter, msg)
-
-		writeMsg        := "Status: MSG_READ\nLast Message:" + msg
+		writeMsg        := "Status: MSG_READ"
 		bytesWrite, err := conn.Write([]byte(writeMsg))
 		if err != nil {
 			log.Printf("Error = %v\n", err.Error())
@@ -57,27 +70,86 @@ func handleConn(conn net.Conn, connCounter int) {
 	}
 }
 
-func readMsg (conn net.Conn) (string, error) {
-	readSize := 4 * 1024; // 4KB as of now
-	b        := make([]byte, readSize)
-	var buf bytes.Buffer
+func readMsg (conn net.Conn) (error) {
+	err := conn.SetDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return  err
+	}
+	defer conn.SetReadDeadline(time.Time{})
 
-	for {
-		n, err := conn.Read(b)
-		if n > 0 {
-			buf.Write(b[:n])
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				break;
-			}
-
-			return buf.String(), err
-		}
+	reader := bufio.NewReader(conn)
+	reqStartLine, err := reader.ReadString('\n')
+	if err != nil {
+		return err
 	}
 
-	return buf.String(), nil
+	var req RequestMeta
+	req.Headers = make(map[string]any)
+	if err = parseReqLine(reqStartLine, &req); err != nil {
+		return err
+	}
+
+	if err = parseHeaders(reader, &req); err != nil {
+		return err
+	}
+
+	fmt.Printf("%+v\n", req)
+
+	// body parsing left
+
+	return nil
+}
+
+func parseReqLine (s string, r *RequestMeta) error {
+	s = strings.TrimSuffix(s, "\r\n")
+	strs := strings.Split(s, " ")
+	if len(strs) != 3 {
+		return errors.New("error parsing request")
+	}
+
+	// method validation
+	switch strs[0] {
+	case "GET": r.Method = GET; break;
+	case "POST": r.Method = POST; break;
+	case "PUT" : r.Method = PUT; break;
+	case "DELETE": r.Method = DELETE; break;
+	default: return errors.New("invalid request method")
+	}
+
+	r.Path = strs[1]
+
+	// version validation
+	if strs[2] != "HTTP/1.1" {
+		return errors.New("invalid http version")
+	}
+	r.Version = strs[2]
+
+	return nil
+}
+
+func parseHeaders(reader *bufio.Reader, req *RequestMeta) (error) {
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return errors.New("error parsing headers")
+		}
+
+		s := strings.TrimSuffix(line, "\r\n")
+		if line == "" {
+			break
+		}
+
+		ss := strings.SplitN(s, ":", 2)
+		if len(ss) != 2 {
+			break
+		}
+
+		key := strings.TrimSpace(ss[0])
+		value := strings.TrimSpace(ss[1])
+		req.Headers[key] = value
+	}
+
+	return nil
 }
 
 //TODO: add a queue to handle connection limit
