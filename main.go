@@ -56,6 +56,7 @@ type RequestMeta struct {
 	Path string
 	Version string
 	Headers map[string]any
+	Body    []byte
 }
 
 func connect() {
@@ -122,9 +123,19 @@ func readMsg (conn net.Conn) (error) {
 		return err
 	}
 
-	fmt.Printf("%+v\n", req)
+	cl := req.Headers["content-length"]
+	contentLength, ok := cl.(int)
+	if !ok {
+		contentLength = 0;
+	}
 
-	// body parsing left
+	req.Body = make([]byte, contentLength)
+	if err = readBody(reader, &req); err != nil {
+		return err
+	}
+
+	fmt.Printf("%+v\n", req)
+	fmt.Println("Body = ", string(req.Body))
 
 	return nil
 }
@@ -201,6 +212,11 @@ func parseHeaderValue(value string, typ HeaderType) (any, error) {
     default:
         return value, nil
     }
+}
+
+func readBody(reader *bufio.Reader, req *RequestMeta) error {
+	_, err := reader.Read(req.Body)
+	return err
 }
 
 func strToInt(value string) (int, error) {
