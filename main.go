@@ -6,12 +6,41 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func main() {
 	connect()
+}
+
+type HeaderType int
+const (
+	TypeString HeaderType = iota
+	TypeInt
+	TypeBool
+)
+
+var HeaderValTypes = map[string]HeaderType{
+    "content-length"                   : TypeInt,
+    "connection"                       : TypeString,
+    "content-type"                     : TypeString,
+    "accept"                           : TypeString,
+    "host"                             : TypeString,
+    "user-agent"                       : TypeString,
+    "authorization"                    : TypeString,
+    "accept-encoding"                  : TypeString,
+    "cache-control"                    : TypeString,
+    "upgrade"                          : TypeString,
+    "origin"                           : TypeString,
+    "access-control-request-method"    : TypeString,
+    "access-control-request-headers"   : TypeString,
+    "access-control-allow-origin"      : TypeString,
+    "access-control-allow-methods"     : TypeString,
+    "access-control-allow-headers"     : TypeString,
+    "access-control-allow-credentials" : TypeString,
+    "access-control-max-age"           : TypeInt,
 }
 
 type RequestMethod string
@@ -128,6 +157,7 @@ func parseReqLine (s string, r *RequestMeta) error {
 }
 
 func parseHeaders(reader *bufio.Reader, req *RequestMeta) (error) {
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -144,12 +174,50 @@ func parseHeaders(reader *bufio.Reader, req *RequestMeta) (error) {
 			break
 		}
 
-		key := strings.TrimSpace(ss[0])
+		key := strings.ToLower(strings.TrimSpace(ss[0]))
 		value := strings.TrimSpace(ss[1])
-		req.Headers[key] = value
+
+		valueType, ok := HeaderValTypes[key]
+		if !ok {
+			valueType = TypeString
+		}
+
+		if v, err := parseHeaderValue(value, valueType); err == nil {
+			req.Headers[key] = v
+		} else {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func parseHeaderValue(value string, typ HeaderType) (any, error) {
+    switch typ {
+    case TypeInt:
+        return strToInt(value)
+    case TypeBool:
+        return strToBool(value)
+    default:
+        return value, nil
+    }
+}
+
+func strToInt(value string) (int, error) {
+	return strconv.Atoi(strings.TrimSpace(value))
+}
+
+func strToBool(value string) (bool, error) {
+	value = strings.TrimSpace(strings.ToLower(value))
+
+	switch value {
+	case "true", "1", "yes", "on":
+		return true, nil
+	case "false", "0", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid value for bool parsing : %q", value)
+	}
 }
 
 //TODO: add a queue to handle connection limit
