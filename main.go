@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -19,9 +20,6 @@ func connect() {
 	}
 
 	log.Printf ("Listening for connections on localhost%v", ":4000")
-	// var (
-	// 	mut sync.Mutex
-	// )
 
 	connCounter := 0
 	for {
@@ -39,21 +37,16 @@ func connect() {
 func handleConn(conn net.Conn, connCounter int) {
 	defer conn.Close()
 
-	b := make([]byte, 2048) // reading 2KB
 	for {
-		bytesRead, err := conn.Read(b)
+		msg, err := readMsg(conn)
 		if err != nil {
-			if err != io.EOF {
-				log.Printf("Error = %v\n", err.Error())
-			}
-
-			break
+			log.Printf ("Conn[%v]: Read Error = %v\n", connCounter, err.Error())
+			return;
 		}
 
-		fmt.Printf ("%+v\n", string(b))
-		fmt.Print (bytesRead, " bytes read\nMessage = ", string(b[:bytesRead]))
+		fmt.Printf ("Conn[%v]: Message = %v", connCounter, msg)
 
-		writeMsg := "Status: MSG_READ\nLast Message:" + string(b[:bytesRead])
+		writeMsg        := "Status: MSG_READ\nLast Message:" + msg
 		bytesWrite, err := conn.Write([]byte(writeMsg))
 		if err != nil {
 			log.Printf("Error = %v\n", err.Error())
@@ -62,12 +55,29 @@ func handleConn(conn net.Conn, connCounter int) {
 
 		fmt.Println (bytesWrite, "bytes Written to connection ", connCounter)
 	}
+}
 
-	fmt.Println ("Closed the connection:", connCounter)
+func readMsg (conn net.Conn) (string, error) {
+	readSize := 4 * 1024; // 4KB as of now
+	b        := make([]byte, readSize)
+	var buf bytes.Buffer
 
-	// mut.Lock()
-	// *connCounter -= 1
-	// mut.Unlock()
+	for {
+		n, err := conn.Read(b)
+		if n > 0 {
+			buf.Write(b[:n])
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				break;
+			}
+
+			return buf.String(), err
+		}
+	}
+
+	return buf.String(), nil
 }
 
 //TODO: add a queue to handle connection limit
