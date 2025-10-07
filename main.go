@@ -42,7 +42,7 @@ func (r *Router) Add(routeStr string, handler HandlerFunc) {
 
 func main() {
 	registerUserRoute()
-	fmt.Printf("%+v\n", AllRoutes)
+	// fmt.Printf("%+v\n", AllRoutes)
 	connect()
 }
 
@@ -57,7 +57,7 @@ func allUserHandler(req *Request, res *Response) {
 }
 
 func registerUserRoute() {
-	router := NewRouter("user")
+	router := NewRouter("/user")
 	router.Add("/add", addUserHandler)
 	router.Add("/all", allUserHandler)
 }
@@ -202,13 +202,40 @@ func handleConn(conn net.Conn, connCounter int) {
 	}
 }
 
+type UrlContents struct {
+	url string
+	queryParams map[string]interface{}
+	pathParams map[string]interface{}
+}
+
+func parseUrl(url string, handlers *[]RouteHandler, res *Response) (UrlContents, error) {
+	// get the string upto ?
+	urlStrParts := strings.Split("?", url)
+	urlStr := strings.TrimSpace(urlStrParts[0])
+
+	// NOTE: left here
+	for _, h := range *handlers {
+		if urlStr == h.route
+	}
+
+	// match the obtained string with routerHandler urls
+	// if matched then okay, move to query params
+	// else 404
+
+}
+
 func handleReq(req *Request, res *Response) {
 	path := req.Path
-	// pathParts := strings.Split(path, "/") // gives weird results
 	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
-	// not supporting, "/", instead "" as index or home
+
+	// if the path was "/", handle it as home
 	if len(parts) == 0 {
 		parts = append(parts, "")
+	}
+
+	// prepending "/"
+	for i, p := range parts {
+		parts[i] = "/" + p
 	}
 
 	fmt.Printf("Path Parts(%v):%+v\n", len(parts), parts)
@@ -217,8 +244,12 @@ func handleReq(req *Request, res *Response) {
 		fmt.Println("Found the router =", router)
 
 		// now looking for the handler function
-		restUrl := path[len(parts[0]) + 1:]
+		restUrl := path[len(parts[0]):]
 		fmt.Println("Rest URL =", restUrl)
+
+		urlCont := parseUrl(restUrl, &router.handlers)
+		req.Headers["QueryParams"] = urlCont.queryParams
+		req.Headers["PathParams"] = urlCont.pathParams
 
 		res.StatusCode = 200
 		res.StatusText = "OK"
