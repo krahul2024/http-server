@@ -12,8 +12,54 @@ import (
 	"time"
 )
 
+var AllRoutes = map[string]*Router{}
+
+type Router struct {
+	pathPrefix string
+	handlers []RouteHandler
+}
+
+type RouteHandler struct {
+	route string
+	handler HandlerFunc
+}
+
+func NewRouter (pathPrefix string) *Router {
+	router := Router {
+		pathPrefix: pathPrefix,
+		handlers : []RouteHandler{},
+	}
+	AllRoutes[pathPrefix] = &router
+	return &router
+}
+
+func (r *Router) Add(routeStr string, handler HandlerFunc) {
+	r.handlers = append(r.handlers, RouteHandler{
+		route: routeStr,
+		handler: handler,
+	})
+}
+
 func main() {
+	registerUserRoute()
+	fmt.Printf("%+v\n", AllRoutes)
 	connect()
+}
+
+func addUserHandler(req *Request, res *Response) {
+	fmt.Println("This is from addUserHandler")
+	res.Body = []byte("Hello from add user")
+}
+
+func allUserHandler(req *Request, res *Response) {
+	fmt.Println("This is from allUserHandler")
+	res.Body = []byte("Hello from all user")
+}
+
+func registerUserRoute() {
+	router := NewRouter("user")
+	router.Add("/add", addUserHandler)
+	router.Add("/all", allUserHandler)
 }
 
 const CRLF    = "\r\n"
@@ -126,27 +172,59 @@ func connect() {
 	}
 }
 
+type HandlerFunc func(req *Request, res *Response)
+type HandleRoute func(path string, handler HandlerFunc)
+
 func handleConn(conn net.Conn, connCounter int) {
 	defer conn.Close()
 
 	for {
-		var req Request
+		var (
+			req Request
+			res Response
+		)
+
 		if err := readMsg(conn, &req); err != nil {
 			log.Printf ("Conn[%v]: Read Error = %v\n", connCounter, err.Error())
 			return;
 		}
 
-		var res Response
+		handleReq(&req, &res)
+
 		res.Version    = req.Version
 		res.Headers    = req.Headers
 		res.Body       = req.Body
-		res.StatusCode = StatusOK.Code
-		res.StatusText = StatusOK.Msg
 
 		if err := writeMsg(conn, &res); err != nil {
 			log.Printf("Error = %v\n", err.Error())
 			return
 		}
+	}
+}
+
+func handleReq(req *Request, res *Response) {
+	path := req.Path
+	// pathParts := strings.Split(path, "/") // gives weird results
+	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
+	// not supporting, "/", instead "" as index or home
+	if len(parts) == 0 {
+		parts = append(parts, "")
+	}
+
+	fmt.Printf("Path Parts(%v):%+v\n", len(parts), parts)
+
+	if router, ok := AllRoutes[parts[0]]; ok {
+		fmt.Println("Found the router =", router)
+
+		// now looking for the handler function
+		restUrl := path[len(parts[0]) + 1:]
+		fmt.Println("Rest URL =", restUrl)
+
+		res.StatusCode = 200
+		res.StatusText = "OK"
+	} else {
+		res.StatusCode = StatusNotFound.Code
+		res.StatusText = StatusNotFound.Msg
 	}
 }
 
@@ -302,6 +380,7 @@ func writeMsg(conn net.Conn, res *Response) error {
 	if err != nil {
 		return err
 	}
+
 	buffer.WriteString(hStr)
 	buffer.WriteString(CRLF)
 	buffer.Write(res.Body)
