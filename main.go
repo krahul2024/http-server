@@ -22,13 +22,15 @@ type Router struct {
 type RouteHandler struct {
 	route string
 	handler HandlerFunc
+	pathParts []string
 }
 
 func NewRouter (pathPrefix string) *Router {
 	router := Router {
 		pathPrefix: pathPrefix,
-		handlers : []RouteHandler{},
+		handlers: []RouteHandler{},
 	}
+
 	AllRoutes[pathPrefix] = &router
 	return &router
 }
@@ -37,6 +39,7 @@ func (r *Router) Add(routeStr string, handler HandlerFunc) {
 	r.handlers = append(r.handlers, RouteHandler{
 		route: routeStr,
 		handler: handler,
+		pathParts: strings.Split(routeStr, "/"),
 	})
 }
 
@@ -202,26 +205,59 @@ func handleConn(conn net.Conn, connCounter int) {
 	}
 }
 
-type UrlContents struct {
+type UrlContent struct {
 	url string
 	queryParams map[string]interface{}
 	pathParams map[string]interface{}
 }
 
-func parseUrl(url string, handlers *[]RouteHandler, res *Response) (UrlContents, error) {
-	// get the string upto ?
-	urlStrParts := strings.Split("?", url)
-	urlStr := strings.TrimSpace(urlStrParts[0])
+func matchUrlStr(reqUrlParts *[]string, srcUrlParts *[]string, urlContent *UrlContent) (bool, error) {
+	// dynamic path values are denoted by :key
+	didMatch := false
 
-	// NOTE: left here
+	for i :=0; i < len(*reqUrlParts); i++ {
+		// matches perfectly, then okay
+		if *urlStrParts[i] == utmParts[i] || strings.HasPrefix(utmParts[i], ":") {
+			// here get the dynamic path key and value
+		} else {
+			return nil, nil
+		}
+	}
+
+	// reset the urlContent if it didn't match
+	if !didMatch {
+		urlContent = &UrlContent{}
+	}
+
+	return didMatch, nil
+}
+
+func parseUrl(url string, handlers *[]RouteHandler, res *Response) (UrlContent, error) {
+	// get the string upto ?
+	reqUrlParts := strings.Split("?", url)
+	// urlStr := strings.TrimSpace(urlStrParts[0])
+
+	urlContent := UrlContent{}
 	for _, h := range *handlers {
-		if urlStr == h.route
+		if len(reqUrlParts) == len(h.pathParts) {
+			didMatch, err := matchUrlStr(&reqUrlParts, &h.pathParts, &urlContent)
+			if err != nil {
+				return urlContent, err
+			}
+
+			if didMatch {
+				// we are done here, nothing to do
+			}
+		}
+
+		// otherwise we don't care
 	}
 
 	// match the obtained string with routerHandler urls
 	// if matched then okay, move to query params
 	// else 404
 
+	return UrlContent{}, nil
 }
 
 func handleReq(req *Request, res *Response) {
@@ -247,7 +283,7 @@ func handleReq(req *Request, res *Response) {
 		restUrl := path[len(parts[0]):]
 		fmt.Println("Rest URL =", restUrl)
 
-		urlCont := parseUrl(restUrl, &router.handlers)
+		urlCont, _ := parseUrl(restUrl, &router.handlers)
 		req.Headers["QueryParams"] = urlCont.queryParams
 		req.Headers["PathParams"] = urlCont.pathParams
 
