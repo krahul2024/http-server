@@ -12,147 +12,11 @@ import (
 	"time"
 )
 
-var AllRoutes = map[string]*Router{}
-
-type Router struct {
-	pathPrefix string
-	handlers []RouteHandler
-}
-
-type RouteHandler struct {
-	route string
-	handler HandlerFunc
-	pathParts []string
-}
-
-func NewRouter (pathPrefix string) *Router {
-	router := Router {
-		pathPrefix: pathPrefix,
-		handlers: []RouteHandler{},
-	}
-
-	AllRoutes[pathPrefix] = &router
-	return &router
-}
-
-func (r *Router) Add(routeStr string, handler HandlerFunc) {
-	r.handlers = append(r.handlers, RouteHandler{
-		route: routeStr,
-		handler: handler,
-		pathParts: strings.Split(routeStr, "/"),
-	})
-}
-
 func main() {
 	registerUserRoute()
 	// fmt.Printf("%+v\n", AllRoutes)
 	connect()
 }
-
-func addUserHandler(req *Request, res *Response) {
-	fmt.Println("This is from addUserHandler")
-	res.Body = []byte("Hello from add user")
-}
-
-func allUserHandler(req *Request, res *Response) {
-	fmt.Println("This is from allUserHandler")
-	res.Body = []byte("Hello from all user")
-}
-
-func registerUserRoute() {
-	router := NewRouter("/user")
-	router.Add("/add", addUserHandler)
-	router.Add("/all", allUserHandler)
-}
-
-const CRLF    = "\r\n"
-const NewLine = "\n"
-
-type HeaderType int
-const (
-	TypeString HeaderType = iota
-	TypeInt
-	TypeBool
-)
-
-var HeaderValTypes = map[string]HeaderType{
-	"content-length"                   : TypeInt,
-	"connection"                       : TypeString,
-	"content-type"                     : TypeString,
-	"accept"                           : TypeString,
-	"host"                             : TypeString,
-	"user-agent"                       : TypeString,
-	"authorization"                    : TypeString,
-	"accept-encoding"                  : TypeString,
-	"cache-control"                    : TypeString,
-	"upgrade"                          : TypeString,
-	"origin"                           : TypeString,
-	"access-control-request-method"    : TypeString,
-	"access-control-request-headers"   : TypeString,
-	"access-control-allow-origin"      : TypeString,
-	"access-control-allow-methods"     : TypeString,
-	"access-control-allow-headers"     : TypeString,
-	"access-control-allow-credentials" : TypeString,
-	"access-control-max-age"           : TypeInt,
-}
-
-// empty struct holds 0 bytes(damn)
-var HopByHopHeaders = map[string]struct{}{
-	"connection":          {},
-	"keep-alive":          {},
-	"proxy-authenticate":  {},
-	"proxy-authorization": {},
-	"te":                  {},
-	"trailer":             {},
-	"transfer-encoding":   {},
-	"upgrade":             {},
-}
-
-type RequestMethod string
-const (
-	GET RequestMethod = "GET"
-	POST = "POST"
-	PUT = "PUT"
-	DELETE = "DELETE"
-)
-
-type Request struct {
-	Method RequestMethod
-	Path string
-	Version string
-	Headers map[string]any
-	Body    []byte
-}
-
-type Response struct {
-	Version    string
-	StatusCode int
-	StatusText string
-	Headers    map[string]any
-	Body []byte
-}
-
-type ReqStatus struct {
-	Code int
-	Msg  string
-}
-var (
-	StatusOK                  = ReqStatus{Code: 200, Msg: "OK"}
-	StatusCreated             = ReqStatus{Code: 201, Msg: "Created"}
-	StatusAccepted            = ReqStatus{Code: 202, Msg: "Accepted"}
-	StatusNoContent           = ReqStatus{Code: 204, Msg: "No Content"}
-
-	StatusBadRequest          = ReqStatus{Code: 400, Msg: "Bad Request"}
-	StatusUnauthorized        = ReqStatus{Code: 401, Msg: "Unauthorized"}
-	StatusForbidden           = ReqStatus{Code: 403, Msg: "Forbidden"}
-	StatusNotFound            = ReqStatus{Code: 404, Msg: "Not Found"}
-	StatusMethodNotAllowed    = ReqStatus{Code: 405, Msg: "Method Not Allowed"}
-
-	StatusInternalServerError = ReqStatus{Code: 500, Msg: "Internal Server Error"}
-	StatusNotImplemented      = ReqStatus{Code: 501, Msg: "Not Implemented"}
-	StatusBadGateway          = ReqStatus{Code: 502, Msg: "Bad Gateway"}
-	StatusServiceUnavailable  = ReqStatus{Code: 503, Msg: "Service Unavailable"}
-)
 
 func connect() {
 	listener, err := net.Listen("tcp", ":4000")
@@ -174,9 +38,6 @@ func connect() {
 		go handleConn(conn, connCounter)
 	}
 }
-
-type HandlerFunc func(req *Request, res *Response)
-type HandleRoute func(path string, handler HandlerFunc)
 
 func handleConn(conn net.Conn, connCounter int) {
 	defer conn.Close()
@@ -205,16 +66,8 @@ func handleConn(conn net.Conn, connCounter int) {
 	}
 }
 
-type UrlContent struct {
-	url string
-	reqStatus ReqStatus
-	handler HandlerFunc
-	queryParams map[string]string
-	pathParams map[string]string
-}
-
 func matchUrlStr(reqUrlParts []string, srcUrlParts []string, urlContent *UrlContent) (bool, error) {
-	for i := 0; i < len(reqUrlParts); i++ {
+	for i := range reqUrlParts {
 		if reqUrlParts[i] == srcUrlParts[i] {
 			continue
 		} else if strings.HasPrefix(srcUrlParts[i], ":") {
