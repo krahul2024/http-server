@@ -76,24 +76,24 @@ const (
 )
 
 var HeaderValTypes = map[string]HeaderType{
-    "content-length"                   : TypeInt,
-    "connection"                       : TypeString,
-    "content-type"                     : TypeString,
-    "accept"                           : TypeString,
-    "host"                             : TypeString,
-    "user-agent"                       : TypeString,
-    "authorization"                    : TypeString,
-    "accept-encoding"                  : TypeString,
-    "cache-control"                    : TypeString,
-    "upgrade"                          : TypeString,
-    "origin"                           : TypeString,
-    "access-control-request-method"    : TypeString,
-    "access-control-request-headers"   : TypeString,
-    "access-control-allow-origin"      : TypeString,
-    "access-control-allow-methods"     : TypeString,
-    "access-control-allow-headers"     : TypeString,
-    "access-control-allow-credentials" : TypeString,
-    "access-control-max-age"           : TypeInt,
+	"content-length"                   : TypeInt,
+	"connection"                       : TypeString,
+	"content-type"                     : TypeString,
+	"accept"                           : TypeString,
+	"host"                             : TypeString,
+	"user-agent"                       : TypeString,
+	"authorization"                    : TypeString,
+	"accept-encoding"                  : TypeString,
+	"cache-control"                    : TypeString,
+	"upgrade"                          : TypeString,
+	"origin"                           : TypeString,
+	"access-control-request-method"    : TypeString,
+	"access-control-request-headers"   : TypeString,
+	"access-control-allow-origin"      : TypeString,
+	"access-control-allow-methods"     : TypeString,
+	"access-control-allow-headers"     : TypeString,
+	"access-control-allow-credentials" : TypeString,
+	"access-control-max-age"           : TypeInt,
 }
 
 // empty struct holds 0 bytes(damn)
@@ -137,21 +137,21 @@ type ReqStatus struct {
 	Msg  string
 }
 var (
-    StatusOK                  = ReqStatus{Code: 200, Msg: "OK"}
-    StatusCreated             = ReqStatus{Code: 201, Msg: "Created"}
-    StatusAccepted            = ReqStatus{Code: 202, Msg: "Accepted"}
-    StatusNoContent           = ReqStatus{Code: 204, Msg: "No Content"}
+	StatusOK                  = ReqStatus{Code: 200, Msg: "OK"}
+	StatusCreated             = ReqStatus{Code: 201, Msg: "Created"}
+	StatusAccepted            = ReqStatus{Code: 202, Msg: "Accepted"}
+	StatusNoContent           = ReqStatus{Code: 204, Msg: "No Content"}
 
-    StatusBadRequest          = ReqStatus{Code: 400, Msg: "Bad Request"}
-    StatusUnauthorized        = ReqStatus{Code: 401, Msg: "Unauthorized"}
-    StatusForbidden           = ReqStatus{Code: 403, Msg: "Forbidden"}
-    StatusNotFound            = ReqStatus{Code: 404, Msg: "Not Found"}
-    StatusMethodNotAllowed    = ReqStatus{Code: 405, Msg: "Method Not Allowed"}
+	StatusBadRequest          = ReqStatus{Code: 400, Msg: "Bad Request"}
+	StatusUnauthorized        = ReqStatus{Code: 401, Msg: "Unauthorized"}
+	StatusForbidden           = ReqStatus{Code: 403, Msg: "Forbidden"}
+	StatusNotFound            = ReqStatus{Code: 404, Msg: "Not Found"}
+	StatusMethodNotAllowed    = ReqStatus{Code: 405, Msg: "Method Not Allowed"}
 
-    StatusInternalServerError = ReqStatus{Code: 500, Msg: "Internal Server Error"}
-    StatusNotImplemented      = ReqStatus{Code: 501, Msg: "Not Implemented"}
-    StatusBadGateway          = ReqStatus{Code: 502, Msg: "Bad Gateway"}
-    StatusServiceUnavailable  = ReqStatus{Code: 503, Msg: "Service Unavailable"}
+	StatusInternalServerError = ReqStatus{Code: 500, Msg: "Internal Server Error"}
+	StatusNotImplemented      = ReqStatus{Code: 501, Msg: "Not Implemented"}
+	StatusBadGateway          = ReqStatus{Code: 502, Msg: "Bad Gateway"}
+	StatusServiceUnavailable  = ReqStatus{Code: 503, Msg: "Service Unavailable"}
 )
 
 func connect() {
@@ -207,57 +207,72 @@ func handleConn(conn net.Conn, connCounter int) {
 
 type UrlContent struct {
 	url string
-	queryParams map[string]interface{}
-	pathParams map[string]interface{}
+	reqStatus ReqStatus
+	handler HandlerFunc
+	queryParams map[string]string
+	pathParams map[string]string
 }
 
-func matchUrlStr(reqUrlParts *[]string, srcUrlParts *[]string, urlContent *UrlContent) (bool, error) {
-	// dynamic path values are denoted by :key
-	didMatch := false
-
-	for i :=0; i < len(*reqUrlParts); i++ {
-		// matches perfectly, then okay
-		if *urlStrParts[i] == utmParts[i] || strings.HasPrefix(utmParts[i], ":") {
-			// here get the dynamic path key and value
+func matchUrlStr(reqUrlParts []string, srcUrlParts []string, urlContent *UrlContent) (bool, error) {
+	for i := 0; i < len(reqUrlParts); i++ {
+		if reqUrlParts[i] == srcUrlParts[i] {
+			continue
+		} else if strings.HasPrefix(srcUrlParts[i], ":") {
+			key := strings.TrimPrefix(srcUrlParts[i], ":")
+			if urlContent.pathParams == nil {
+				urlContent.pathParams = make(map[string]string)
+			}
+			urlContent.pathParams[key] = reqUrlParts[i]
 		} else {
-			return nil, nil
+			*urlContent = UrlContent{}
+			return false, nil
 		}
 	}
 
-	// reset the urlContent if it didn't match
-	if !didMatch {
-		urlContent = &UrlContent{}
+	// query params extraction
+	queryMarkCount := strings.Count(reqUrlParts[len(reqUrlParts)-1], "?")
+	if queryMarkCount > 1 {
+		*urlContent = UrlContent{}
+		return false, errors.New("invalid query params and url formation")
 	}
 
-	return didMatch, nil
+	last := reqUrlParts[len(reqUrlParts)-1]
+	parts := strings.SplitN(last, "?", 2)
+	if len(parts) == 2 {
+		queryStr := parts[1]
+		if urlContent.queryParams == nil {
+			urlContent.queryParams = make(map[string]string)
+		}
+		for _, pair := range strings.Split(queryStr, "&") {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				continue // might want to do something
+			}
+			urlContent.queryParams[kv[0]] = kv[1]
+		}
+	}
+
+	return true, nil
 }
 
-func parseUrl(url string, handlers *[]RouteHandler, res *Response) (UrlContent, error) {
-	// get the string upto ?
-	reqUrlParts := strings.Split("?", url)
-	// urlStr := strings.TrimSpace(urlStrParts[0])
-
+func parseUrl(url string, handlers *[]RouteHandler) (UrlContent, error) {
+	reqUrlParts := strings.Split(url, "/")
 	urlContent := UrlContent{}
+
 	for _, h := range *handlers {
-		if len(reqUrlParts) == len(h.pathParts) {
-			didMatch, err := matchUrlStr(&reqUrlParts, &h.pathParts, &urlContent)
-			if err != nil {
+		if len(reqUrlParts) == len(h.pathParts) || len(reqUrlParts) > 0 {
+			didMatch, err := matchUrlStr(reqUrlParts, h.pathParts, &urlContent)
+			if err != nil || didMatch {
+				urlContent.handler = h.handler
 				return urlContent, err
 			}
-
-			if didMatch {
-				// we are done here, nothing to do
-			}
 		}
-
-		// otherwise we don't care
 	}
 
-	// match the obtained string with routerHandler urls
-	// if matched then okay, move to query params
-	// else 404
+	urlContent.reqStatus = StatusNotFound
+	urlContent.handler = nil
 
-	return UrlContent{}, nil
+	return urlContent, nil
 }
 
 func handleReq(req *Request, res *Response) {
@@ -283,12 +298,15 @@ func handleReq(req *Request, res *Response) {
 		restUrl := path[len(parts[0]):]
 		fmt.Println("Rest URL =", restUrl)
 
-		urlCont, _ := parseUrl(restUrl, &router.handlers)
-		req.Headers["QueryParams"] = urlCont.queryParams
-		req.Headers["PathParams"] = urlCont.pathParams
-
-		res.StatusCode = 200
-		res.StatusText = "OK"
+		urlCont, err := parseUrl(restUrl, &router.handlers)
+		if err == nil {
+			req.Headers["QueryParams"] = urlCont.queryParams
+			req.Headers["PathParams"] = urlCont.pathParams
+			urlCont.handler(req, res)
+		} else {
+			res.StatusCode = urlCont.reqStatus.Code
+			res.StatusText = urlCont.reqStatus.Msg
+		}
 	} else {
 		res.StatusCode = StatusNotFound.Code
 		res.StatusText = StatusNotFound.Msg
@@ -398,14 +416,14 @@ func parseHeaders(reader *bufio.Reader, req *Request) (error) {
 }
 
 func parseHeaderValue(value string, typ HeaderType) (any, error) {
-    switch typ {
-    case TypeInt:
-        return strToInt(value)
-    case TypeBool:
-        return strToBool(value)
-    default:
-        return value, nil
-    }
+	switch typ {
+	case TypeInt:
+		return strToInt(value)
+	case TypeBool:
+		return strToBool(value)
+	default:
+		return value, nil
+	}
 }
 
 func readBody(reader *bufio.Reader, req *Request) error {
