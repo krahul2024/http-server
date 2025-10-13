@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +15,6 @@ import (
 
 func main() {
 	registerUserRoute()
-	// fmt.Printf("%+v\n", AllRoutes)
 	connect()
 }
 
@@ -66,12 +66,59 @@ func handleConn(conn net.Conn, connCounter int) {
 	}
 }
 
+func setQueryParams(lastSeg string, urlContent *UrlContent) error {
+	queryMarkCount := strings.Count(lastSeg, "?")
+	print("Query mark count = ", queryMarkCount)
+
+	if queryMarkCount > 1 {
+		*urlContent = UrlContent{}
+		return errors.New("invalid query params and url formation")
+	}
+
+	parts := strings.SplitN(lastSeg, "?", 2)
+	print("last-segment = ", lastSeg, ", parts = ", parts)
+
+	if len(parts) == 2  && len(parts[1]) > 0{
+		queryStr := parts[1]
+		if urlContent.queryParams == nil {
+			urlContent.queryParams = make(map[string]string)
+		}
+		for _, pair := range strings.FieldsFunc(queryStr, func(r rune) bool { return r == '&' }) {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				continue // might want to do something
+			}
+
+			key, _ := url.QueryUnescape(kv[0])
+			value, _ := url.QueryUnescape(kv[1])
+			urlContent.queryParams[key] = value
+		}
+	}
+
+	return nil
+}
+
+func hasQueryParams(reqUrlStrSeq string, srcPrefix string) bool {
+	return strings.TrimSpace(strings.SplitN(reqUrlStrSeq, "?", 2)[0]) == srcPrefix
+}
+
 func matchUrlStr(reqUrlParts []string, srcUrlParts []string, urlContent *UrlContent) (bool, error) {
-	for i := range reqUrlParts {
-		if reqUrlParts[i] == srcUrlParts[i] {
+	n := len(reqUrlParts)
+
+	err := setQueryParams(reqUrlParts[n-1], urlContent)
+	if err != nil {
+		*urlContent = UrlContent{}
+		return false, err
+	}
+
+	for i := range n {
+		reqStr := reqUrlParts[i]
+		srcStr := srcUrlParts[i]
+
+		if reqStr== srcStr || (i == n-1 && hasQueryParams(reqStr, srcStr)){
 			continue
-		} else if strings.HasPrefix(srcUrlParts[i], ":") {
-			key := strings.TrimPrefix(srcUrlParts[i], ":")
+		} else if strings.HasPrefix(srcStr, ":") {
+			key := strings.TrimPrefix(srcStr, ":")
 			if urlContent.pathParams == nil {
 				urlContent.pathParams = make(map[string]string)
 			}
@@ -82,37 +129,14 @@ func matchUrlStr(reqUrlParts []string, srcUrlParts []string, urlContent *UrlCont
 		}
 	}
 
-	// query params extraction
-	queryMarkCount := strings.Count(reqUrlParts[len(reqUrlParts)-1], "?")
-	if queryMarkCount > 1 {
-		*urlContent = UrlContent{}
-		return false, errors.New("invalid query params and url formation")
-	}
-
-	last := reqUrlParts[len(reqUrlParts)-1]
-	parts := strings.SplitN(last, "?", 2)
-	if len(parts) == 2 {
-		queryStr := parts[1]
-		if urlContent.queryParams == nil {
-			urlContent.queryParams = make(map[string]string)
-		}
-		for _, pair := range strings.Split(queryStr, "&") {
-			kv := strings.SplitN(pair, "=", 2)
-			if len(kv) != 2 {
-				continue // might want to do something
-			}
-			urlContent.queryParams[kv[0]] = kv[1]
-		}
-	}
-
 	return true, nil
 }
 
-func parseUrl(url string, handlers *[]RouteHandler) (UrlContent, error) {
-	reqUrlParts := strings.Split(url, "/")
+func parseUrl(url string, handlers []RouteHandler) (UrlContent, error) {
+	reqUrlParts := strings.FieldsFunc(url, func(r rune) bool { return r == '/' })
 	urlContent := UrlContent{}
 
-	for _, h := range *handlers {
+	for _, h := range handlers {
 		if len(reqUrlParts) == len(h.pathParts) || len(reqUrlParts) > 0 {
 			didMatch, err := matchUrlStr(reqUrlParts, h.pathParts, &urlContent)
 			if err != nil || didMatch {
@@ -125,7 +149,7 @@ func parseUrl(url string, handlers *[]RouteHandler) (UrlContent, error) {
 	urlContent.reqStatus = StatusNotFound
 	urlContent.handler = nil
 
-	return urlContent, nil
+	return urlContent, errors.New("invalid url, not found")
 }
 
 func handleReq(req *Request, res *Response) {
@@ -142,16 +166,18 @@ func handleReq(req *Request, res *Response) {
 		parts[i] = "/" + p
 	}
 
-	fmt.Printf("Path Parts(%v):%+v\n", len(parts), parts)
+	printf("Path Parts(%v):%+v\n", len(parts), parts)
 
 	if router, ok := AllRoutes[parts[0]]; ok {
-		fmt.Println("Found the router =", router)
+		print("Found the router =", router)
 
 		// now looking for the handler function
 		restUrl := path[len(parts[0]):]
-		fmt.Println("Rest URL =", restUrl)
+		print("Rest URL =", restUrl)
 
-		urlCont, err := parseUrl(restUrl, &router.handlers)
+		urlCont, err := parseUrl(restUrl, router.handlers)
+		printf("%+v", urlCont)
+
 		if err == nil {
 			req.Headers["QueryParams"] = urlCont.queryParams
 			req.Headers["PathParams"] = urlCont.pathParams

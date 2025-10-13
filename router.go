@@ -30,7 +30,7 @@ func (r *Router) Add(routeStr string, handler HandlerFunc) {
 	r.handlers = append(r.handlers, RouteHandler{
 		route: routeStr,
 		handler: handler,
-		pathParts: strings.Split(routeStr, "/"),
+		pathParts: strings.FieldsFunc(routeStr, func(r rune) bool { return r == '/'}),
 	})
 }
 
