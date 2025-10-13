@@ -2,12 +2,15 @@ package main
 
 import "strings"
 
+var AllRoutes = map[string]*Router{}
+
 type Router struct {
 	pathPrefix string
 	handlers []RouteHandler
 }
 
 type RouteHandler struct {
+	method RequestMethod
 	route string
 	handler HandlerFunc
 	pathParts []string
@@ -27,6 +30,14 @@ func NewRouter (pathPrefix string) *Router {
 }
 
 func (r *Router) Add(routeStr string, handler HandlerFunc) {
+	r.handlers = append(r.handlers, RouteHandler{
+		route: routeStr,
+		handler: handler,
+		pathParts: strings.FieldsFunc(routeStr, func(r rune) bool { return r == '/'}),
+	})
+}
+
+func (r *Router) Get(routeStr string, handler HandlerFunc) {
 	r.handlers = append(r.handlers, RouteHandler{
 		route: routeStr,
 		handler: handler,

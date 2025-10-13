@@ -15,7 +15,21 @@ import (
 
 func main() {
 	registerUserRoute() // instead of this, add server/app.addRouter(router)
+
+	// server := HttpServer{
+	// 	Port: ":4000",
+	// 	Routers: []*Router{},
+	// 	StartTime: time.Now(),
+	// 	ReqLogger: DefaultLogger{}, // or nil
+	// }
+	//
+	// server.Listen()
+	// server.AddRouter(AllRoutes["/user"])
+	//
+	// print(len(server.Routers), server.Routers[0])
+
 	connect() // instead of this app.start/listen(PORT)
+
 }
 
 func connect() {

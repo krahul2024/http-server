@@ -3,8 +3,6 @@ package main
 const CRLF    = "\r\n"
 const NewLine = "\n"
 
-var AllRoutes = map[string]*Router{}
-
 var HeaderValTypes = map[string]HeaderType{
 	"content-length"                   : TypeInt,
 	"connection"                       : TypeString,
