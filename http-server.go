@@ -100,7 +100,7 @@ func handleConn(conn net.Conn, connCounter int, routers map[string]*Router) {
 
 		res.Version    = req.Version
 		res.Headers    = req.Headers
-		res.Body       = req.Body
+		// res.Body       = req.Body
 
 		if err := writeMsg(conn, &res); err != nil {
 			log.Printf("Error = %v\n", err.Error())

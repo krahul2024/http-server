@@ -124,12 +124,11 @@ func handleReq(req *Request, res *Response, routers map[string]*Router) {
 	path := req.Path
 	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
 
-	// if the path was "/", handle it as home
+	// handle "/" as home
 	if len(parts) == 0 {
 		parts = append(parts, "")
 	}
 
-	// prepending "/"
 	for i, p := range parts {
 		parts[i] = "/" + p
 	}
@@ -139,7 +138,7 @@ func handleReq(req *Request, res *Response, routers map[string]*Router) {
 	if router, ok := routers[parts[0]]; ok {
 		print("Found the router =", router)
 
-		// now looking for the handler function
+		// looking for the handler function
 		restUrl := path[len(parts[0]):]
 		print("Rest URL =", restUrl)
 
@@ -149,7 +148,9 @@ func handleReq(req *Request, res *Response, routers map[string]*Router) {
 		if err == nil {
 			req.Headers["QueryParams"] = urlCont.queryParams
 			req.Headers["PathParams"] = urlCont.pathParams
+
 			urlCont.handler(req, res)
+			print("body = ", res.Body, "\n", string(res.Body))
 		} else {
 			res.StatusCode = urlCont.reqStatus.Code
 			res.StatusText = urlCont.reqStatus.Msg
