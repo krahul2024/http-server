@@ -36,6 +36,10 @@ func (r *Router) Add(routeStr string, handler HandlerFunc) {
 
 func registerUserRoute() {
 	router := NewRouter("/user")
-	router.Add("/add", addUserHandler)
-	router.Add("/all", allUserHandler)
+
+	router.Add("/add",       addUserHandler) // make this router.Method(GET/POST/PUT/DELETE/...)
+	router.Add("/all",       allUserHandler)
+	router.Add("/:id",       getUserById)
+	router.Add("/:id/name", getUserByNameAndId)
+	router.Add("/:id/:name", getUserByNameAndId)
 }

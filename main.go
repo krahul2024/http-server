@@ -14,8 +14,8 @@ import (
 )
 
 func main() {
-	registerUserRoute()
-	connect()
+	registerUserRoute() // instead of this, add server/app.addRouter(router)
+	connect() // instead of this app.start/listen(PORT)
 }
 
 func connect() {
@@ -103,7 +103,7 @@ func hasQueryParams(reqUrlStrSeq string, srcPrefix string) bool {
 }
 
 func matchUrlStr(reqUrlParts []string, srcUrlParts []string, urlContent *UrlContent) (bool, error) {
-	n := len(reqUrlParts)
+	n := len(srcUrlParts)
 
 	err := setQueryParams(reqUrlParts[n-1], urlContent)
 	if err != nil {
@@ -122,7 +122,8 @@ func matchUrlStr(reqUrlParts []string, srcUrlParts []string, urlContent *UrlCont
 			if urlContent.pathParams == nil {
 				urlContent.pathParams = make(map[string]string)
 			}
-			urlContent.pathParams[key] = reqUrlParts[i]
+			pathParamValue, _, _ := strings.Cut(reqUrlParts[i], "?")
+			urlContent.pathParams[key] = pathParamValue
 		} else {
 			*urlContent = UrlContent{}
 			return false, nil
@@ -137,7 +138,7 @@ func parseUrl(url string, handlers []RouteHandler) (UrlContent, error) {
 	urlContent := UrlContent{}
 
 	for _, h := range handlers {
-		if len(reqUrlParts) == len(h.pathParts) || len(reqUrlParts) > 0 {
+		if len(reqUrlParts) == len(h.pathParts) && len(reqUrlParts) > 0 {
 			didMatch, err := matchUrlStr(reqUrlParts, h.pathParts, &urlContent)
 			if err != nil || didMatch {
 				urlContent.handler = h.handler
