@@ -13,70 +13,23 @@ import (
 	"time"
 )
 
+// TODO:
+// Add queue, deadline, timeouts and connection pool
+// middleware support
+// proper response return to client
+
 func main() {
-	registerUserRoute() // instead of this, add server/app.addRouter(router)
-
-	// server := HttpServer{
-	// 	Port: ":4000",
-	// 	Routers: []*Router{},
-	// 	StartTime: time.Now(),
-	// 	ReqLogger: DefaultLogger{}, // or nil
-	// }
-	//
-	// server.Listen()
-	// server.AddRouter(AllRoutes["/user"])
-	//
-	// print(len(server.Routers), server.Routers[0])
-
-	connect() // instead of this app.start/listen(PORT)
-
-}
-
-func connect() {
-	listener, err := net.Listen("tcp", ":4000")
-	if err != nil {
-		log.Fatalf("Error = %v\n", err.Error())
+	server := HttpServer {
+		Port: ":4000",
+		StartTime: time.Now(),
+		ReqLogger: DefaultLogger{},
 	}
 
-	log.Printf ("Listening for connections on localhost%v", ":4000")
+	server.AddRouter(userRouter())
 
-	connCounter := 0
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Printf("Error = %v\n", err.Error())
-			break
-		}
-
-		connCounter += 1
-		go handleConn(conn, connCounter)
-	}
-}
-
-func handleConn(conn net.Conn, connCounter int) {
-	defer conn.Close()
-
-	for {
-		var (
-			req Request
-			res Response
-		)
-
-		if err := readMsg(conn, &req); err != nil {
-			log.Printf ("Conn[%v]: Read Error = %v\n", connCounter, err.Error())
-			return;
-		}
-
-		handleReq(&req, &res)
-
-		res.Version    = req.Version
-		res.Headers    = req.Headers
-		res.Body       = req.Body
-
-		if err := writeMsg(conn, &res); err != nil {
-			log.Printf("Error = %v\n", err.Error())
-			return
-		}
+	log.Printf ("Starting the server at localhost%v\n", server.Port)
+	if err := server.Listen(); err != nil {
+		log.Fatalf ("Error listening starting server localhost%v\nError:%v\n", server.Port, err)
 	}
 }
 
@@ -167,7 +120,7 @@ func parseUrl(url string, handlers []RouteHandler) (UrlContent, error) {
 	return urlContent, errors.New("invalid url, not found")
 }
 
-func handleReq(req *Request, res *Response) {
+func handleReq(req *Request, res *Response, routers map[string]*Router) {
 	path := req.Path
 	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
 
@@ -183,7 +136,7 @@ func handleReq(req *Request, res *Response) {
 
 	printf("Path Parts(%v):%+v\n", len(parts), parts)
 
-	if router, ok := AllRoutes[parts[0]]; ok {
+	if router, ok := routers[parts[0]]; ok {
 		print("Found the router =", router)
 
 		// now looking for the handler function

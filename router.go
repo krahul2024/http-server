@@ -45,7 +45,7 @@ func (r *Router) Get(routeStr string, handler HandlerFunc) {
 	})
 }
 
-func registerUserRoute() {
+func userRouter() *Router {
 	router := NewRouter("/user")
 
 	router.Add("/add",       addUserHandler) // make this router.Method(GET/POST/PUT/DELETE/...)
@@ -53,4 +53,6 @@ func registerUserRoute() {
 	router.Add("/:id",       getUserById)
 	router.Add("/:id/name", getUserByNameAndId)
 	router.Add("/:id/:name", getUserByNameAndId)
+
+	return router
 }
